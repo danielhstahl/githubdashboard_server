@@ -3,21 +3,16 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const app=require('express')()
 const bodyParser=require('body-parser')
 app.use(bodyParser.json())
-const getData=path=>{
+const getData=(reqType, hostname)=>path=>{
     const options={
         path,
-        hostname:'api.github.com',
+        hostname,
         headers:{'User-Agent':path},
-        //port:8080,
-        //headers:{[headerKey]:getHeader},
-        //body:req.body,
         method:'GET',
-        //rejectUnauthorized: false,
     }
-    console.log(options)
     let result=''
     return new Promise((resolve, reject)=>{
-        const serverRequest=https.request(options, serverResult=>{
+        const serverRequest=reqType.request(options, serverResult=>{
             serverResult.on('data', d => {
                 result+=d
             })
@@ -32,6 +27,8 @@ const getData=path=>{
     })
     
 }
+const getHTTPSData=getData(https, 'api.github.com')
+module.exports.getData=getData
 
 const getTimeArray=(minDate, aggregation)=>{
     let timeArray=[minDate]
@@ -56,7 +53,7 @@ const getParamsFromReq=req=>{
 }
 app.get('/:owner/:repo/time_issues', (req, res)=>{
     const {owner, repo, aggregation, minDate, min_date}=getParamsFromReq(req)
-    getData(`/repos/${owner}/${repo}/issues?state=closed&since=${min_date}`).then(result=>{
+    getHTTPSData(`/repos/${owner}/${repo}/issues?state=closed&since=${min_date}`).then(result=>{
         return result.map(({created_at, closed_at})=>({
             aggregateIndex:getTimeInMSFromIndex(minDate, convertStringToMS(created_at), aggregation),
             timeTillClose: new Date(closed_at)-new Date(created_at)
@@ -75,7 +72,7 @@ const getMSSinceBeginning=(minDate, aggregation)=>({created_at})=>getTimeInMSFro
 const getCount=(aggr, curr)=>Object.assign({}, aggr, {[curr]:(aggr[curr]||0)+1})
 app.get('/:owner/:repo/issues', (req, res)=>{
     const {owner, repo, aggregation, minDate, min_date}=getParamsFromReq(req)
-    getData(`/repos/${owner}/${repo}/issues?state=all&since=${min_date}`)
+    getHTTPSData(`/repos/${owner}/${repo}/issues?state=all&since=${min_date}`)
         .then(result=>result.map(getMSSinceBeginning(minDate, aggregation)))
         .then(result=>result.reduce(getCount, {}))
         .then(result=>{
@@ -86,7 +83,7 @@ app.get('/:owner/:repo/issues', (req, res)=>{
 })
 app.get('/:owner/:repo/releases', (req, res)=>{
     const {owner, repo, aggregation, minDate, min_date}=getParamsFromReq(req)
-    getData(`/repos/${owner}/${repo}/releases?since=${min_date}`)
+    getHTTPSData(`/repos/${owner}/${repo}/releases?since=${min_date}`)
         .then(result=>result.map(getMSSinceBeginning(minDate, aggregation)))
         .then(result=>result.reduce(getCount, {}))
         .then(result=>{
@@ -97,7 +94,7 @@ app.get('/:owner/:repo/releases', (req, res)=>{
 })
 app.get('/:owner/:repo/commits', (req, res)=>{
     const {owner, repo, aggregation, minDate, min_date}=getParamsFromReq(req)
-    getData(`/repos/${owner}/${repo}/commits?since=${min_date}`)
+    getHTTPSData(`/repos/${owner}/${repo}/commits?since=${min_date}`)
         .then(result=>result.map(({commit})=>getTimeInMSFromIndex(minDate, convertStringToMS(commit.committer.date), aggregation)))
         .then(result=>result.reduce(getCount, {}))
         .then(result=>{
